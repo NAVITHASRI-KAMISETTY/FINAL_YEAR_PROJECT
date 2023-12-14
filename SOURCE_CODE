@@ -1,0 +1,83 @@
+# FINAL_YEAR_PROJECT
+# Import necessary libraries
+import pandas as pd
+import nltk
+import time
+from wordcloud import WordCloud
+import string
+import re
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import IsolationForest
+import streamlit as st
+
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+# Set the title for Streamlit app
+st.title('Detecting and Preventing Abuse on LinkedIn using Isolation Forests')
+
+# Load the dataset
+dataset = pd.read_csv('D:\\DATA BACKUP\\Desktop\\NAVITHA\\B.TECH PROJECTS\\MAJOR PROJECT\\linkedin-data.csv')
+dataset_transformed = dataset[['class', 'LinkedIn Post']]
+y = dataset_transformed['class'].values
+
+# Function to preprocess text data
+def preprocess(textdata):
+    processedText = []
+    wordLemm = WordNetLemmatizer()
+
+    urlpattern = r"((http://)[^ ]*|(https://)[^ ]*|( www\.)[^ ]*)"
+    userpattern = '@[^\s]+'
+    alphapattern = "[^a-zA-Z0-9]"
+    sequencepattern = r"(.)\1\1+"
+    seqreplacepattern = r"\1\1"
+    newlinepattern = '\n'
+
+    for msg in textdata:
+        msg = msg.lower()
+
+        msg = re.sub(urlpattern, ' URL', msg)
+        msg = re.sub(userpattern, ' USER', msg)
+        msg = re.sub(alphapattern, " ", msg)
+        msg = re.sub(newlinepattern, " ", msg)
+        msg = re.sub(sequencepattern, seqreplacepattern, msg)
+
+        msgwords = ''
+        for word in msg.split():
+            if len(word) > 1:
+                word = wordLemm.lemmatize(word)
+                msgwords += (word + ' ')
+
+        processedText.append(msgwords)
+
+    return processedText
+
+# Preprocess the LinkedIn Post column
+corpus = preprocess(dataset_transformed['LinkedIn Post'])
+
+# Create a CountVectorizer
+cv = CountVectorizer(max_features=2000)
+X = cv.fit_transform(corpus).toarray()
+
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+# Create and train the Isolation Forest model
+classifier = IsolationForest(n_estimators=1000)
+classifier.fit(X_train, y_train)
+
+# Function to predict using the trained model
+def predict(vectorizer, model, text):
+    textdata = vectorizer.transform(preprocess([text])).toarray()
+    result = model.predict(textdata)
+    return result
+
+# Streamlit components for input and classification
+msg = st.text_input('Enter Message:')
+if st.button('Classify'):
+    test_data = [msg]
+    result = predict(cv, classifier, test_data)
+    st.write("Prediction:", result)
+
